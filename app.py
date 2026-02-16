@@ -15,7 +15,7 @@ import streamlit.components.v1 as components
 _FALLBACK_SVG = (
     "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 630' width='420' height='630'>"
     "<rect width='100%' height='100%' fill='%23141414'/>"
-    "<text x='50%' y='55%' font-family='Arial, Helvetica, sans-serif' font-size='360' fill='%23E50914' font-weight='700' text-anchor='middle' dominant-baseline='middle'>N</text>"
+    "<text x='50%' y='50%' font-family='Arial, Helvetica, sans-serif' font-size='360' fill='%23E50914' font-weight='800' text-anchor='middle' dominant-baseline='middle'>N</text>"
     "</svg>"
 )
 FALLBACK_POSTER = 'data:image/svg+xml;utf8,' + urllib.parse.quote(_FALLBACK_SVG)
@@ -68,23 +68,22 @@ def excerpt(text: str, max_len: int = 160) -> str:
     return cut + '...'
 
 
-def render_image_with_fallback(img_url: str, width: int = 120, alt: str = 'poster') -> None:
-    """Render an <img> tag that falls back to FALLBACK_POSTER when the source fails to load.
-
-    Uses components.html so we can attach an onerror handler to swap the src client-side.
+def render_image_with_fallback(img_url, width=120, alt='poster'):
+    """Render an <img> with an onerror handler that replaces a failing src with
+    the poster-shaped `FALLBACK_POSTER` (keeps a consistent 2:3 aspect ratio).
+    Use this instead of `st.image` so broken/missing URLs gracefully fall back.
     """
-    if not img_url or (isinstance(img_url, float) and pd.isna(img_url)):
+    # normalize/validate incoming URL
+    if not img_url or (isinstance(img_url, float) and pd.isna(img_url)) or not str(img_url).strip():
         img_url = FALLBACK_POSTER
-    safe_src = html.escape(str(img_url), quote=True)
-    safe_fallback = html.escape(str(FALLBACK_POSTER), quote=True)
-    alt_text = html.escape(str(alt), quote=True)
-    # keep poster aspect ratio ~2:3; compute height for the iframe
     height = int(width * 1.5)
-    img_html = (
-        f"<img src=\"{safe_src}\" alt=\"{alt_text}\" "
-        f"width=\"{width}\" style=\"height:auto;max-height:{height}px;object-fit:cover;border-radius:6px;\" "
-        f"onerror=\"this.onerror=null;this.src='{safe_fallback}';\"/>")
-    components.html(img_html, height=height + 8)
+    # embed fallback as a quoted JS string (FALLBACK_POSTER is URL-encoded SVG)
+    html = (
+        f"<img src=\"{img_url}\" alt=\"{alt}\" width=\"{width}\" height=\"{height}\" "
+        f"style=\"object-fit:cover;border-radius:6px;border:1px solid #ddd;\" "
+        f"onerror=\"this.onerror=null;this.src='{FALLBACK_POSTER}';\"/>")
+    st.markdown(html, unsafe_allow_html=True)
+
 
 # --- 4. Sidebar: Branding & Test Samples ---
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", width=150)
@@ -165,6 +164,8 @@ if 'scrolled_to_recs' not in st.session_state:
     st.session_state.scrolled_to_recs = False
 if 'scrolled_to_cluster_glimpse' not in st.session_state:
     st.session_state.scrolled_to_cluster_glimpse = False
+if 'last_query' not in st.session_state:
+    st.session_state.last_query = ''
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
@@ -172,12 +173,27 @@ user_input = st.text_area(
     placeholder="e.g., A group of survivors must navigate a post-apocalyptic world..."
 )
 
+# Allow the user to control how strict semantic matching should be.
+# Higher values => stricter (fewer, closer matches). Default kept at 0.08.
+sim_threshold = st.slider(
+    "Similarity threshold (higher = stricter)",
+    min_value=0.0,
+    max_value=0.50,
+    value=0.08,
+    step=0.01,
+    help="Raise to require closer semantic matches; lower to broaden results.",
+)
+st.caption("Tip: move the slider to adjust how closely recommendations must match your description.")
+
 col1, col2 = st.columns([1, 1])
 
 with col1:
     if st.button("Predict & Recommend"):
         if user_input.strip():
             cleaned_text = advanced_clean(user_input)
+            # persist cleaned input so subsequent UI interactions (slider)
+            # can recompute similarity without re-clicking Predict
+            st.session_state.last_query = cleaned_text
             vectorized_input = vectorizer.transform([cleaned_text])
             
             if vectorized_input.nnz == 0:
@@ -234,13 +250,18 @@ if st.session_state.last_cluster is not None:
 
     # If we haven't yet shown the first batch after prediction, do so now.
     # --- stricter matching: use semantic similarity to avoid overly-broad results
-    # compute cosine similarity between input and corpus TF-IDF rows
-    SIM_THRESHOLD = 0.08  # tune this to make matches stricter (lower => broader)
+    # compute cosine similarity between the last query (persisted) and corpus
+    SIM_THRESHOLD = sim_threshold  # user-controlled via slider
     sim_series = None
-    try:
-        sim_scores = (vectorized_input @ df_tfidf.T).toarray()[0]
-        sim_series = pd.Series(sim_scores, index=df.index)
-    except Exception:
+    if st.session_state.get('last_query'):
+        try:
+            v_input = vectorizer.transform([st.session_state.last_query])
+            sim_scores = (v_input @ df_tfidf.T).toarray()[0]
+            sim_series = pd.Series(sim_scores, index=df.index)
+        except Exception:
+            sim_series = pd.Series([0.0] * len(df), index=df.index)
+    else:
+        # no persisted query available (no prediction yet)
         sim_series = pd.Series([0.0] * len(df), index=df.index)
 
     # prefer high-similarity items inside the predicted cluster
