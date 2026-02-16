@@ -6,6 +6,7 @@ import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 import urllib.parse
+import base64
 import html
 import streamlit.components.v1 as components
 
@@ -13,12 +14,20 @@ import streamlit.components.v1 as components
 # Use a poster-shaped SVG (2:3) with a large red "N" so the placeholder
 # matches poster aspect ratio and loads at the same visual size as real posters.
 _FALLBACK_SVG = (
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 630' width='420' height='630'>"
-    "<rect width='100%' height='100%' fill='%23141414'/>"
-    "<text x='50%' y='50%' font-family='Arial, Helvetica, sans-serif' font-size='360' fill='%23E50914' font-weight='800' text-anchor='middle' dominant-baseline='middle'>N</text>"
-    "</svg>"
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 630" preserveAspectRatio="xMidYMid meet">'
+    '<rect x="0" y="0" width="420" height="630" rx="14" fill="#141414"/>'
+    # centered group with a large red 'N' — use alignment-baseline and text-anchor
+    '<g transform="translate(210,315)">'
+    '<text x="0" y="0" font-family="Arial, Helvetica, sans-serif" font-size="260" '
+    'fill="#E50914" font-weight="800" text-anchor="middle" alignment-baseline="central">N</text>'
+    '</g>'
+    '</svg>'
 )
-FALLBACK_POSTER = 'data:image/svg+xml;utf8,' + urllib.parse.quote(_FALLBACK_SVG)
+# Use base64-encoded data URI for maximum cross-browser reliability
+FALLBACK_POSTER = 'data:image/svg+xml;base64,' + base64.b64encode(_FALLBACK_SVG.encode('utf-8')).decode('ascii')
+
+# Default similarity threshold (used by slider reset)
+DEFAULT_SIM_THRESHOLD = 0.08
 
 # --- 1. Setup & Downloads ---
 @st.cache_resource
@@ -166,6 +175,10 @@ if 'scrolled_to_cluster_glimpse' not in st.session_state:
     st.session_state.scrolled_to_cluster_glimpse = False
 if 'last_query' not in st.session_state:
     st.session_state.last_query = ''
+if 'sim_threshold' not in st.session_state:
+    st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
+if 'sim_threshold_prev' not in st.session_state:
+    st.session_state.sim_threshold_prev = DEFAULT_SIM_THRESHOLD
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
@@ -173,23 +186,38 @@ user_input = st.text_area(
     placeholder="e.g., A group of survivors must navigate a post-apocalyptic world..."
 )
 
-# Allow the user to control how strict semantic matching should be.
-# Higher values => stricter (fewer, closer matches). Default kept at 0.08.
-sim_threshold = st.slider(
-    "Similarity threshold (higher = stricter)",
-    min_value=0.0,
-    max_value=0.50,
-    value=0.08,
-    step=0.01,
-    help="Raise to require closer semantic matches; lower to broaden results.",
-)
+# Similarity slider with Reset / Undo controls
+col_s, col_reset, col_undo = st.columns([6, 1, 1])
+with col_s:
+    st.slider(
+        "Similarity threshold (higher = stricter)",
+        min_value=0.0,
+        max_value=0.50,
+        step=0.01,
+        key='sim_threshold',
+        help="Higher value => fewer but more semantically-similar recommendations",
+    )
+with col_reset:
+    if st.button("Reset to default"):
+        st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
+with col_undo:
+    if st.button("Undo"):
+        prev = st.session_state.get('sim_threshold_prev')
+        if prev is not None:
+            st.session_state.sim_threshold, st.session_state.sim_threshold_prev = prev, st.session_state.sim_threshold
 st.caption("Tip: move the slider to adjust how closely recommendations must match your description.")
+
+# local alias used elsewhere in the module
+sim_threshold = st.session_state.sim_threshold
 
 col1, col2 = st.columns([1, 1])
 
 with col1:
     if st.button("Predict & Recommend"):
         if user_input.strip():
+            # capture the slider value used for this prediction so the user can
+            # undo back to it if needed
+            st.session_state.sim_threshold_prev = st.session_state.get('sim_threshold', DEFAULT_SIM_THRESHOLD)
             cleaned_text = advanced_clean(user_input)
             # persist cleaned input so subsequent UI interactions (slider)
             # can recompute similarity without re-clicking Predict
