@@ -8,8 +8,16 @@ from nltk.corpus import stopwords
 import urllib.parse
 import streamlit.components.v1 as components
 
-# Fallback poster used when a title has no image/poster in the CSV
-FALLBACK_POSTER = "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg"
+# Fallback poster used when a title has no image/poster in the CSV.
+# Use a poster-shaped SVG (2:3) with a large red "N" so the placeholder
+# matches poster aspect ratio and loads at the same visual size as real posters.
+_FALLBACK_SVG = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 630' width='420' height='630'>"
+    "<rect width='100%' height='100%' fill='%23141414'/>"
+    "<text x='50%' y='55%' font-family='Arial, Helvetica, sans-serif' font-size='360' fill='%23E50914' font-weight='700' text-anchor='middle' dominant-baseline='middle'>N</text>"
+    "</svg>"
+)
+FALLBACK_POSTER = 'data:image/svg+xml;utf8,' + urllib.parse.quote(_FALLBACK_SVG)
 
 # --- 1. Setup & Downloads ---
 @st.cache_resource
@@ -260,6 +268,13 @@ if st.session_state.last_cluster is not None:
                 st.markdown(header)
                 if rec.get('listed_in'):
                     st.caption(rec.get('listed_in'))
+                # short description excerpt for recommendation cards
+                desc = rec.get('description') or rec.get('Summary') or ''
+                if desc:
+                    st.markdown(
+                        f"<div style='color:#555;font-size:13px'>{excerpt(desc, 160)}</div>",
+                        unsafe_allow_html=True,
+                    )
                 link_bits = []
                 nf_link = rec.get('Netflix Link')
                 imdb_link = rec.get('IMDb Link')
