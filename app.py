@@ -177,8 +177,6 @@ if 'last_query' not in st.session_state:
     st.session_state.last_query = ''
 if 'sim_threshold' not in st.session_state:
     st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
-if 'sim_threshold_prev' not in st.session_state:
-    st.session_state.sim_threshold_prev = DEFAULT_SIM_THRESHOLD
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
@@ -186,8 +184,8 @@ user_input = st.text_area(
     placeholder="e.g., A group of survivors must navigate a post-apocalyptic world..."
 )
 
-# Similarity slider with Reset / Undo controls
-col_s, col_reset, col_undo = st.columns([6, 1, 1])
+# Similarity slider with a single Reset control (clearly labelled)
+col_s, col_reset = st.columns([6, 1])
 with col_s:
     st.slider(
         "Similarity threshold (higher = stricter)",
@@ -198,13 +196,9 @@ with col_s:
         help="Higher value => fewer but more semantically-similar recommendations",
     )
 with col_reset:
-    if st.button("Reset to default"):
+    if st.button("Reset slider"):
+        # explicitly set only the slider back to the default value
         st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
-with col_undo:
-    if st.button("Undo"):
-        prev = st.session_state.get('sim_threshold_prev')
-        if prev is not None:
-            st.session_state.sim_threshold, st.session_state.sim_threshold_prev = prev, st.session_state.sim_threshold
 st.caption("Tip: move the slider to adjust how closely recommendations must match your description.")
 
 # local alias used elsewhere in the module
@@ -213,11 +207,8 @@ sim_threshold = st.session_state.sim_threshold
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    if st.button("Predict & Recommend"):
+        if st.button("Predict & Recommend"):
         if user_input.strip():
-            # capture the slider value used for this prediction so the user can
-            # undo back to it if needed
-            st.session_state.sim_threshold_prev = st.session_state.get('sim_threshold', DEFAULT_SIM_THRESHOLD)
             cleaned_text = advanced_clean(user_input)
             # persist cleaned input so subsequent UI interactions (slider)
             # can recompute similarity without re-clicking Predict
