@@ -25,9 +25,17 @@ def load_data():
     df = pd.read_csv('netflix_final_clustered_data.csv')
     model = pickle.load(open('netflix_kmeans_model.pkl', 'rb'))
     vectorizer = pickle.load(open('netflix_tfidf_vectorizer.pkl', 'rb'))
-    return df, model, vectorizer
+    # precompute TF-IDF matrix for the corpus (used for semantic similarity)
+    text_corpus = df['text_blob'].fillna('').astype(str).tolist()
+    try:
+        df_tfidf = vectorizer.transform(text_corpus)
+    except Exception:
+        # defensive: if transform fails, create an empty sparse matrix placeholder
+        from scipy import sparse
+        df_tfidf = sparse.csr_matrix((len(text_corpus), 0))
+    return df, model, vectorizer, df_tfidf
 
-df, model, vectorizer = load_data()
+df, model, vectorizer, df_tfidf = load_data()
 
 # --- 3. Cleaning Function ---
 def advanced_clean(text):
@@ -155,8 +163,11 @@ if st.session_state.last_cluster is not None:
     
     # SMART: show initial recommendations once, then let the "Suggest More"
     # button fetch additional unseen batches or reset when exhausted.
-    def pick_and_store(n=5):
-        available = full_cluster_df[~full_cluster_df['title'].isin(st.session_state.seen_titles)]
+    def pick_and_store(n=5, source_df=None):
+        # source_df: optional DataFrame to sample from (defaults to the full cluster)
+        if source_df is None:
+            source_df = full_cluster_df
+        available = source_df[~source_df['title'].isin(st.session_state.seen_titles)]
         if available.empty:
             return pd.DataFrame([])
         n_show = min(len(available), n)
@@ -170,14 +181,37 @@ if st.session_state.last_cluster is not None:
         return picks
 
     # If we haven't yet shown the first batch after prediction, do so now.
+    # --- stricter matching: use semantic similarity to avoid overly-broad results
+    # compute cosine similarity between input and corpus TF-IDF rows
+    SIM_THRESHOLD = 0.08  # tune this to make matches stricter (lower => broader)
+    sim_series = None
+    try:
+        sim_scores = (vectorized_input @ df_tfidf.T).toarray()[0]
+        sim_series = pd.Series(sim_scores, index=df.index)
+    except Exception:
+        sim_series = pd.Series([0.0] * len(df), index=df.index)
+
+    # prefer high-similarity items inside the predicted cluster
+    cluster_sim_scores = sim_series.loc[full_cluster_df.index]
+    candidate_df = full_cluster_df.loc[cluster_sim_scores[cluster_sim_scores >= SIM_THRESHOLD].sort_values(ascending=False).index]
+
     if not st.session_state.recs_shown:
-        new_recommendations = pick_and_store(5)
+        if not candidate_df.empty:
+            new_recommendations = pick_and_store(5, source_df=candidate_df)
+        else:
+            # no close semantic matches in predicted cluster — fall back but warn
+            st.warning("Low semantic match for this description in the predicted cluster — results may be broad.")
+            new_recommendations = pick_and_store(5)
     else:
         # Rehydrate the last recommendations for display
         if st.session_state.last_recommendations:
             new_recommendations = pd.DataFrame(st.session_state.last_recommendations)
         else:
-            new_recommendations = pick_and_store(5)
+            # when user clicks 'Suggest More' use the stricter candidate set if available
+            if not candidate_df.empty:
+                new_recommendations = pick_and_store(5, source_df=candidate_df)
+            else:
+                new_recommendations = pick_and_store(5)
 
     # Anchor recommendations for scrolling and display
     st.markdown("<div id='recommendations_anchor'></div>", unsafe_allow_html=True)
