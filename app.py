@@ -20,7 +20,6 @@ stop_words = set(stopwords.words('english'))
 # --- 2. Load Artifacts ---
 @st.cache_resource
 def load_data():
-    # Make sure these filenames match exactly what you saved in your notebook
     df = pd.read_csv('netflix_final_clustered_data.csv')
     model = pickle.load(open('netflix_kmeans_model.pkl', 'rb'))
     vectorizer = pickle.load(open('netflix_tfidf_vectorizer.pkl', 'rb'))
@@ -53,7 +52,6 @@ sample_options = {
 selected_sample_label = st.sidebar.selectbox("Choose a sample to copy:", list(sample_options.keys()))
 if selected_sample_label != "Select a sample...":
     st.sidebar.code(sample_options[selected_sample_label], language=None)
-    st.sidebar.caption("Copy the text above and paste it into the main box.")
 
 st.sidebar.markdown("---")
 st.sidebar.header("🔍 Dataset Explorer")
@@ -65,40 +63,65 @@ if st.sidebar.button("Show Random Titles from Dataset"):
 
 # --- 5. Main Prediction Area ---
 st.title("🎬 Netflix Content Strategy & Recommendation Engine")
-st.markdown("""
-Identify the **Strategic Cluster** of any movie or TV show. 
-The model analyzes the 'Thematic DNA' of the description to categorize it into one of 6 pillars.
-""")
+
+# Initialize Session States
+if 'last_cluster' not in st.session_state:
+    st.session_state.last_cluster = None
+if 'seen_titles' not in st.session_state:
+    st.session_state.seen_titles = []
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
-    height=200, 
+    height=150, 
     placeholder="e.g., A group of survivors must navigate a post-apocalyptic world..."
 )
 
-# WRAPPING PREDICTION IN BUTTON TO PREVENT AUTOMATIC CLUSTER 0
-if st.button("Predict & Recommend"):
-    if user_input.strip():
-        cleaned_text = advanced_clean(user_input)
-        vectorized_input = vectorizer.transform([cleaned_text])
-        
-        # Check if the text is meaningful to the model
-        if vectorized_input.nnz == 0:
-            st.error("⚠️ **The model doesn't recognize those keywords.**")
-            st.warning("Input is too vague. Please add more descriptive details (use the samples in the sidebar for reference).")
-        else:
-            cluster_id = model.predict(vectorized_input)[0]
-            st.success(f"Predicted Strategic Cluster ID: **{cluster_id}**")
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    if st.button("Predict & Recommend"):
+        if user_input.strip():
+            cleaned_text = advanced_clean(user_input)
+            vectorized_input = vectorizer.transform([cleaned_text])
             
-            # Recommendation Logic
-            st.markdown(f"### 🍿 Similar Titles in Cluster {cluster_id}")
-            cluster_df = df[df['cluster_km'] == cluster_id]
-            # Randomly sample so results feel fresh
-            n_samples = min(len(cluster_df), 5)
-            recommendations = cluster_df[['title', 'type', 'listed_in', 'release_year']].sample(n_samples)
-            st.table(recommendations)
-    else:
-        st.warning("Please enter a description to begin analysis.")
+            if vectorized_input.nnz == 0:
+                st.error("⚠️ The model doesn't recognize those keywords.")
+                st.session_state.last_cluster = None
+            else:
+                # NEW PREDICTION: Reset the seen titles list
+                st.session_state.last_cluster = model.predict(vectorized_input)[0]
+                st.session_state.seen_titles = [] 
+        else:
+            st.warning("Please enter a description.")
+
+with col2:
+    # "Suggest More" Button logic
+    suggest_more = st.button("🔄 Suggest More (Unseen Content)")
+
+# Logic for displaying recommendations
+if st.session_state.last_cluster is not None:
+    st.success(f"Strategic Cluster ID: **{st.session_state.last_cluster}**")
+    
+    # 1. Filter by cluster
+    full_cluster_df = df[df['cluster_km'] == st.session_state.last_cluster]
+    
+    # 2. FILTER OUT TITLES ALREADY SEEN
+    available_df = full_cluster_df[~full_cluster_df['title'].isin(st.session_state.seen_titles)]
+    
+    if available_df.empty:
+        st.warning("You have viewed all titles in this cluster! Resetting history...")
+        st.session_state.seen_titles = []
+        available_df = full_cluster_df
+    
+    # 3. Pick 5 new titles
+    n_to_show = min(len(available_df), 5)
+    new_recommendations = available_df[['title', 'type', 'listed_in', 'release_year']].sample(n_to_show)
+    
+    # 4. Add these new titles to the "seen" list so they don't show up next time
+    st.session_state.seen_titles.extend(new_recommendations['title'].tolist())
+    
+    st.markdown(f"### 🍿 Recommendations (Unseen in this session)")
+    st.table(new_recommendations)
+    st.caption(f"Currently tracking {len(st.session_state.seen_titles)} seen titles in this session.")
 else:
-    # This shows when the app first loads
-    st.info("Waiting for input... Paste a description and click 'Predict' to see the clustering result.")
+    st.info("Waiting for input... Paste a description and click 'Predict' to see results.")
