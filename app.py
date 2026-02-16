@@ -5,6 +5,8 @@ import re
 import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
+import urllib.parse
+import streamlit.components.v1 as components
 
 # --- 1. Setup & Downloads ---
 @st.cache_resource
@@ -57,9 +59,26 @@ st.sidebar.markdown("---")
 st.sidebar.header("🔍 Dataset Explorer")
 selected_cluster = st.sidebar.slider("Select Cluster ID to view", 0, 5, 0)
 if st.sidebar.button("Show Random Titles from Dataset"):
+    # Anchor the cluster glimpse so we can scroll to it programmatically
+    st.markdown("<div id='cluster_glimpse'></div>", unsafe_allow_html=True)
     st.subheader(f"Glimpse into Cluster {selected_cluster}")
     cluster_view = df[df['cluster_km'] == selected_cluster][['title', 'type', 'listed_in', 'description']].sample(10)
     st.dataframe(cluster_view)
+    # Provide a Netflix search link for each shown title
+    for _, r in cluster_view[['title']].iterrows():
+        nf_url = f"https://www.netflix.com/search?q={urllib.parse.quote_plus(r['title'])}"
+        st.markdown(f"<a href=\"{nf_url}\" target=\"_blank\" rel=\"noopener\">🔗 Open on Netflix — {r['title']}</a>", unsafe_allow_html=True)
+    # Scroll to the cluster glimpse element
+    components.html(
+        """
+        <script>
+          const el = document.getElementById('cluster_glimpse');
+          if (el) { el.scrollIntoView({behavior: 'smooth', block: 'center'}); }
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state.scrolled_to_cluster_glimpse = True
 
 # --- 5. Main Prediction Area ---
 st.title("🎬 Netflix Content Strategy & Recommendation Engine")
@@ -73,6 +92,10 @@ if 'recs_shown' not in st.session_state:
     st.session_state.recs_shown = False
 if 'last_recommendations' not in st.session_state:
     st.session_state.last_recommendations = []
+if 'scrolled_to_recs' not in st.session_state:
+    st.session_state.scrolled_to_recs = False
+if 'scrolled_to_cluster_glimpse' not in st.session_state:
+    st.session_state.scrolled_to_cluster_glimpse = False
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
@@ -97,6 +120,7 @@ with col1:
                 st.session_state.seen_titles = []
                 st.session_state.recs_shown = False
                 st.session_state.last_recommendations = []
+                st.session_state.scrolled_to_recs = False
         else:
             st.warning("Please enter a description.")
 
@@ -142,11 +166,29 @@ if st.session_state.last_cluster is not None:
         else:
             new_recommendations = pick_and_store(5)
 
+    # Anchor recommendations for scrolling and display
+    st.markdown("<div id='recommendations_anchor'></div>", unsafe_allow_html=True)
     st.markdown(f"### 🍿 Recommendations (Unseen in this session)")
     if new_recommendations.empty:
         st.warning("No available recommendations for this cluster.")
     else:
         st.table(new_recommendations)
+        # Per-row Netflix 'view' links (open in new tab)
+        for _, r in new_recommendations[['title']].iterrows():
+            nf_url = f"https://www.netflix.com/search?q={urllib.parse.quote_plus(r['title'])}"
+            st.markdown(f"<a href=\"{nf_url}\" target=\"_blank\" rel=\"noopener\">🔗 Netflix View — {r['title']}</a>", unsafe_allow_html=True)
+        # Auto-scroll to recommendations on first display
+        if st.session_state.recs_shown and not st.session_state.scrolled_to_recs:
+            components.html(
+                """
+                <script>
+                  const el = document.getElementById('recommendations_anchor');
+                  if (el) { el.scrollIntoView({behavior: 'smooth', block: 'center'}); }
+                </script>
+                """,
+                height=0,
+            )
+            st.session_state.scrolled_to_recs = True
     st.caption(f"Currently tracking {len(st.session_state.seen_titles)} seen titles in this session.")
 
     # Smart Suggest button (only shown when recommendations are visible)
