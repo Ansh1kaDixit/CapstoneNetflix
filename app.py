@@ -207,14 +207,14 @@ sim_threshold = st.session_state.sim_threshold
 col1, col2 = st.columns([1, 1])
 
 with col1:
-        if st.button("Predict & Recommend"):
+    if st.button("Predict & Recommend"):
         if user_input.strip():
             cleaned_text = advanced_clean(user_input)
             # persist cleaned input so subsequent UI interactions (slider)
             # can recompute similarity without re-clicking Predict
             st.session_state.last_query = cleaned_text
             vectorized_input = vectorizer.transform([cleaned_text])
-            
+
             if vectorized_input.nnz == 0:
                 st.error("⚠️ The model doesn't recognize those keywords.")
                 st.session_state.last_cluster = None
