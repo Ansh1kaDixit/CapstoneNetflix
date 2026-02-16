@@ -177,12 +177,19 @@ if 'last_query' not in st.session_state:
     st.session_state.last_query = ''
 if 'sim_threshold' not in st.session_state:
     st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
+if 'reset_sim_requested' not in st.session_state:
+    st.session_state.reset_sim_requested = False
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
     height=150, 
     placeholder="e.g., A group of survivors must navigate a post-apocalyptic world..."
 )
+
+# If a reset was requested on the previous run, apply it BEFORE rendering the slider
+if st.session_state.reset_sim_requested:
+    st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
+    st.session_state.reset_sim_requested = False
 
 # Similarity slider with a single Reset control (clearly labelled)
 col_s, col_reset = st.columns([6, 1])
@@ -197,8 +204,8 @@ with col_s:
     )
 with col_reset:
     if st.button("Reset slider"):
-        # explicitly set only the slider back to the default value
-        st.session_state.sim_threshold = DEFAULT_SIM_THRESHOLD
+        # set a flag — the actual slider value will be set on the next rerun
+        st.session_state.reset_sim_requested = True
 st.caption("Tip: move the slider to adjust how closely recommendations must match your description.")
 
 # local alias used elsewhere in the module
