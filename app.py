@@ -20,7 +20,7 @@ stop_words = set(stopwords.words('english'))
 # --- 2. Load Artifacts ---
 @st.cache_resource
 def load_data():
-    # Ensure these filenames match your saved files exactly
+    # Make sure these filenames match exactly what you saved in your notebook
     df = pd.read_csv('netflix_final_clustered_data.csv')
     model = pickle.load(open('netflix_kmeans_model.pkl', 'rb'))
     vectorizer = pickle.load(open('netflix_tfidf_vectorizer.pkl', 'rb'))
@@ -35,14 +35,12 @@ def advanced_clean(text):
     cleaned_words = [lemmatizer.lemmatize(w) for w in words if w not in stop_words]
     return " ".join(cleaned_words)
 
-# --- 4. Sidebar: Branding & Tools ---
+# --- 4. Sidebar: Branding & Test Samples ---
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", width=150)
 st.sidebar.title("Navigation")
 st.sidebar.info("Developed by **Anshika Dixit** | Unsupervised ML Project")
 
 st.sidebar.markdown("---")
-
-# Test Samples Dropdown in Sidebar
 st.sidebar.header("🧪 Test Samples")
 sample_options = {
     "Select a sample...": "",
@@ -58,11 +56,9 @@ if selected_sample_label != "Select a sample...":
     st.sidebar.caption("Copy the text above and paste it into the main box.")
 
 st.sidebar.markdown("---")
-
-# Cluster Explorer in Sidebar
-st.sidebar.header("🔍 Cluster Explorer")
-selected_cluster = st.sidebar.slider("Select Cluster ID to view titles", 0, 5, 0)
-if st.sidebar.button("Show Random Titles"):
+st.sidebar.header("🔍 Dataset Explorer")
+selected_cluster = st.sidebar.slider("Select Cluster ID to view", 0, 5, 0)
+if st.sidebar.button("Show Random Titles from Dataset"):
     st.subheader(f"Glimpse into Cluster {selected_cluster}")
     cluster_view = df[df['cluster_km'] == selected_cluster][['title', 'type', 'listed_in', 'description']].sample(10)
     st.dataframe(cluster_view)
@@ -70,25 +66,26 @@ if st.sidebar.button("Show Random Titles"):
 # --- 5. Main Prediction Area ---
 st.title("🎬 Netflix Content Strategy & Recommendation Engine")
 st.markdown("""
-This application uses a **K-Means Clustering model** to categorize Netflix titles based on their thematic DNA. 
-Paste a detailed description below to identify its strategic cluster.
+Identify the **Strategic Cluster** of any movie or TV show. 
+The model analyzes the 'Thematic DNA' of the description to categorize it into one of 6 pillars.
 """)
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
     height=200, 
-    placeholder="e.g., A high-octane science fiction journey into outer space where a team of soldiers fights an alien invasion..."
+    placeholder="e.g., A group of survivors must navigate a post-apocalyptic world..."
 )
 
+# WRAPPING PREDICTION IN BUTTON TO PREVENT AUTOMATIC CLUSTER 0
 if st.button("Predict & Recommend"):
     if user_input.strip():
         cleaned_text = advanced_clean(user_input)
         vectorized_input = vectorizer.transform([cleaned_text])
         
-        # Zero-Vector Check
+        # Check if the text is meaningful to the model
         if vectorized_input.nnz == 0:
             st.error("⚠️ **The model doesn't recognize those keywords.**")
-            st.warning("Input is too vague. Please add more descriptive details about the genre, plot, or characters (use the samples in the sidebar for reference).")
+            st.warning("Input is too vague. Please add more descriptive details (use the samples in the sidebar for reference).")
         else:
             cluster_id = model.predict(vectorized_input)[0]
             st.success(f"Predicted Strategic Cluster ID: **{cluster_id}**")
@@ -96,8 +93,12 @@ if st.button("Predict & Recommend"):
             # Recommendation Logic
             st.markdown(f"### 🍿 Similar Titles in Cluster {cluster_id}")
             cluster_df = df[df['cluster_km'] == cluster_id]
+            # Randomly sample so results feel fresh
             n_samples = min(len(cluster_df), 5)
             recommendations = cluster_df[['title', 'type', 'listed_in', 'release_year']].sample(n_samples)
             st.table(recommendations)
     else:
-        st.warning("Please enter some text to analyze.")
+        st.warning("Please enter a description to begin analysis.")
+else:
+    # This shows when the app first loads
+    st.info("Waiting for input... Paste a description and click 'Predict' to see the clustering result.")
