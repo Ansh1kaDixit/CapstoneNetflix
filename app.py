@@ -20,6 +20,7 @@ stop_words = set(stopwords.words('english'))
 # --- 2. Load Artifacts ---
 @st.cache_resource
 def load_data():
+    # Ensure these filenames match your saved files exactly
     df = pd.read_csv('netflix_final_clustered_data.csv')
     model = pickle.load(open('netflix_kmeans_model.pkl', 'rb'))
     vectorizer = pickle.load(open('netflix_tfidf_vectorizer.pkl', 'rb'))
@@ -34,37 +35,60 @@ def advanced_clean(text):
     cleaned_words = [lemmatizer.lemmatize(w) for w in words if w not in stop_words]
     return " ".join(cleaned_words)
 
-# --- 4. Streamlit Layout ---
-st.set_page_config(page_title="Netflix Theme Predictor", page_icon="🍿")
-st.title("🎬 Netflix Content Strategy & Recommendation Engine")
+# --- 4. Sidebar: Branding & Tools ---
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", width=150)
+st.sidebar.title("Navigation")
+st.sidebar.info("Developed by **Anshika Dixit** | Unsupervised ML Project")
 
-# Testing Samples in Sidebar
-st.sidebar.header("🧪 Test Sample Descriptions")
-st.sidebar.info("Copy and paste these into the box to see the model work accurately:")
+st.sidebar.markdown("---")
 
-samples = {
-    "Kids/Animation": "An animated musical adventure for young children featuring talking animals and catchy songs about friendship.",
-    "Documentary": "A deep-dive investigative documentary exploring real-life crime scenes and forensic evidence.",
-    "Horror/Thriller": "A dark psychological thriller where a group of teenagers discovers a haunted house in the middle of a forest.",
-    "International Drama": "A sweeping romantic period drama set in 19th-century Europe, exploring themes of forbidden love and betrayal."
+# Test Samples Dropdown in Sidebar
+st.sidebar.header("🧪 Test Samples")
+sample_options = {
+    "Select a sample...": "",
+    "Kids/Animation": "An animated musical adventure for young children featuring talking animals and catchy songs about friendship and learning.",
+    "Documentary": "A deep-dive investigative documentary exploring real-life crime scenes, forensic evidence, and interviews with experts.",
+    "Horror/Thriller": "A dark psychological thriller where a group of teenagers discovers a haunted house in the middle of a forest and must survive the night.",
+    "International Drama": "A sweeping romantic period drama set in 19th-century Europe, exploring themes of forbidden love, social class, and betrayal."
 }
 
-for label, text in samples.items():
-    st.sidebar.text_area(f"Sample for {label}:", text, height=100)
+selected_sample_label = st.sidebar.selectbox("Choose a sample to copy:", list(sample_options.keys()))
+if selected_sample_label != "Select a sample...":
+    st.sidebar.code(sample_options[selected_sample_label], language=None)
+    st.sidebar.caption("Copy the text above and paste it into the main box.")
 
-# Main Prediction Area
-st.subheader("Analyze Content Description")
-user_input = st.text_area("Paste a detailed description here:", height=150, help="Short titles like 'Baby' don't provide enough data. Try 2-3 sentences.")
+st.sidebar.markdown("---")
 
-if st.button("Predict Cluster & Recommend"):
+# Cluster Explorer in Sidebar
+st.sidebar.header("🔍 Cluster Explorer")
+selected_cluster = st.sidebar.slider("Select Cluster ID to view titles", 0, 5, 0)
+if st.sidebar.button("Show Random Titles"):
+    st.subheader(f"Glimpse into Cluster {selected_cluster}")
+    cluster_view = df[df['cluster_km'] == selected_cluster][['title', 'type', 'listed_in', 'description']].sample(10)
+    st.dataframe(cluster_view)
+
+# --- 5. Main Prediction Area ---
+st.title("🎬 Netflix Content Strategy & Recommendation Engine")
+st.markdown("""
+This application uses a **K-Means Clustering model** to categorize Netflix titles based on their thematic DNA. 
+Paste a detailed description below to identify its strategic cluster.
+""")
+
+user_input = st.text_area(
+    "Paste Content Description Here:", 
+    height=200, 
+    placeholder="e.g., A high-octane science fiction journey into outer space where a team of soldiers fights an alien invasion..."
+)
+
+if st.button("Predict & Recommend"):
     if user_input.strip():
         cleaned_text = advanced_clean(user_input)
         vectorized_input = vectorizer.transform([cleaned_text])
         
-        # Check if the model recognizes any words
+        # Zero-Vector Check
         if vectorized_input.nnz == 0:
             st.error("⚠️ **The model doesn't recognize those keywords.**")
-            st.warning("Short phrases like 'baby theme songs' are too vague. Please add more descriptive details about the genre, plot, or characters.")
+            st.warning("Input is too vague. Please add more descriptive details about the genre, plot, or characters (use the samples in the sidebar for reference).")
         else:
             cluster_id = model.predict(vectorized_input)[0]
             st.success(f"Predicted Strategic Cluster ID: **{cluster_id}**")
@@ -76,4 +100,4 @@ if st.button("Predict Cluster & Recommend"):
             recommendations = cluster_df[['title', 'type', 'listed_in', 'release_year']].sample(n_samples)
             st.table(recommendations)
     else:
-        st.warning("Please enter some text first.")
+        st.warning("Please enter some text to analyze.")
