@@ -154,12 +154,10 @@ if st.session_state.last_cluster is not None:
     if not remaining_df.empty:
         if st.button("🔄 Suggest More (Unseen Content)"):
             pick_and_store(5)
-            st.experimental_rerun()
     else:
         # All titles have been seen in this session: offer reset-and-suggest
         if st.button("🔁 Reset & Suggest Again"):
             st.session_state.seen_titles = []
             pick_and_store(5)
-            st.experimental_rerun()
 else:
     st.info("Waiting for input... Paste a description and click 'Predict' to see results.")
