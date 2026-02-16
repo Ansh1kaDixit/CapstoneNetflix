@@ -1,142 +1,81 @@
-🎬 Netflix Unsupervised Machine Learning & EDA Project
+This README provides a professional overview of the project, focusing on the strategic findings and technical implementation. You can use it as the main landing page for your GitHub repository.
 
-An exploratory and unsupervised machine learning analysis of Netflix’s 2019 catalog — combining data wrangling, visualization, and clustering to uncover content patterns and business insights.
+🎬 Netflix Content Strategy & Clustering Analysis
+📌 Project Overview
+This project involves a comprehensive unsupervised machine learning analysis of the Netflix catalog. By merging standard metadata with external IMDb ratings, this study moves beyond simple categorization to provide a quality-centric view of Netflix's evolution. The core goal is to understand the "thematic DNA" of content and automate the discovery of "Micro-genres" to enhance user recommendation systems.
 
-📊 Overview
+Project Type: Unsupervised ML (Clustering)
 
-This project explores the catalog of Netflix titles as of 2019 (sourced from Flixable
-), focusing on:
+Author: Anshika Dixit
 
-The evolution of Movies vs TV Shows on the platform
+Contribution: Individual
 
-Regional content distribution and dominant genres
+🔍 The Problem Statement & Business Context
+Since 2010, Netflix’s library has seen a dramatic shift. While the number of movies has stabilized, the volume of TV shows has tripled.
+Objectives:
 
-Unsupervised content clustering based on metadata and text features
+Analyze the Pivot: Investigate the shift toward episodic content and its impact on user engagement.
 
-The analysis integrates exploratory data analysis (EDA) with unsupervised learning (K-Means & Hierarchical clustering) to uncover natural groupings in Netflix’s library and derive actionable insights for content strategy and recommendation systems.
+Identify Quality Hubs: Pinpoint geographical regions producing the highest-rated content.
 
-🧠 Objectives
+Automate Discovery: Use NLP to cluster content into 6 strategic pillars to power hyper-personalized user "rows."
 
-Perform data cleaning and feature engineering on Netflix metadata
+💡 Key Strategic Findings
+1. The Quality-Volume Paradox
+Finding: While the US leads in total production volume, countries like India and South Korea serve as "Quality Hubs," producing content that achieves significantly higher average IMDb scores.
 
-Conduct EDA to understand trends by type, year, and country
+Recommendation: Netflix should continue aggressive investment in localized "Originals" from these hubs, as they offer a superior ROI for prestige content globally.
 
-Use TF-IDF on text fields (description, listed_in, cast) for semantic features
+2. TV Show Dominance
+Finding: TV shows generally maintain higher critical engagement than movies on the platform. This validates the business shift toward episodic content, which drives long-term subscriber retention ("stickiness").
 
-Apply dimensionality reduction (Truncated SVD) for efficient clustering
+3. Thematic Content Pillars
+Through K-Means Clustering, we successfully identified 6 core thematic segments:
 
-Run K-Means and Hierarchical Clustering to group similar content
+International Romantic Dramas
 
-Interpret clusters and translate findings into business insights
+Kids & Family Animation
 
-📂 Dataset Description
+Documentary & True-Crime
 
-The dataset contains metadata for Netflix titles available as of 2019.
+Action, Sci-Fi & Adventure
 
-Column Name	Description
-show_id	Unique identifier for each title
-type	Movie or TV Show
-title	Title of the content
-director	Director name(s)
-cast	Cast members
-country	Country of production
-date_added	Date the title was added to Netflix
-release_year	Original release year
-rating	Content maturity rating (e.g., PG-13, TV-MA)
-duration	Runtime or number of seasons
-listed_in	Genre categories
-description	Short summary of the title
-🧩 Technologies & Libraries Used
+Stand-Up Comedy
 
-Python 3.x
+Scripted Regional Content (focused on India/Asia)
 
-Pandas – Data manipulation and preprocessing
+🛠️ Technical Workflow
+1. NLP Pipeline
+Pre-processing: Regex cleaning, lowercasing, and Lemmatization to normalize text.
 
-NumPy – Numerical operations
+Vectorization: TF-IDF (Term Frequency-Inverse Document Frequency) with 5,000 features and n-gram ranges (1, 2) to capture context.
 
-Matplotlib / Seaborn – Visualizations
+2. Clustering Algorithms
+We evaluated three models to ensure robust grouping:
 
-Scikit-learn – TF-IDF, SVD, Clustering (KMeans, Hierarchical)
+K-Means (Final Model): Achieved the best separation with a Silhouette Score of 0.0162.
 
-NLTK – Text preprocessing
+Hierarchical Clustering: Used Dendrogram analysis to visualize the "genealogy" of sub-genres.
 
-🚀 Project Workflow
+DBSCAN: Used to identify "Outliers"—highly unique, non-formulaic titles that represent niche content categories.
+🚀 How to Run the App
+Install dependencies:
 
-Data Wrangling
+Bash
+pip install streamlit pandas scikit-learn nltk wordcloud
+Launch the Streamlit app:
 
-Handled missing values and normalized categorical fields
+Bash
+streamlit run app.py
+📂 Repository Structure
+netflix_ml.ipynb: Full Jupyter Notebook containing EDA, hypothesis testing, and model development.
 
-Derived new features like content_age, year_added_numeric, and type_encoded
+app.py: Streamlit application script for real-time cluster prediction.
 
-Exploratory Data Analysis (EDA)
+netflix_kmeans_model.pkl: Saved K-Means model for deployment.
 
-Visualized content growth over years
+netflix_tfidf_vectorizer.pkl: Saved TF-IDF vectorizer.
 
-Compared movie vs TV show trends
+netflix_final_clustered_data.csv: The finalized dataset with cluster labels and integrated IMDb scores.
 
-Analyzed ratings and top genres per region
-
-Feature Engineering
-
-Created text_blob combining multiple textual columns
-
-Generated TF-IDF embeddings for semantic content similarity
-
-Applied TruncatedSVD for dimensionality reduction
-
-Unsupervised Learning
-
-K-Means Clustering (optimal k via Elbow + Silhouette)
-
-Hierarchical Clustering for interpretability check
-
-Cluster interpretation through top terms and summary statistics
-
-Insights
-
-Netflix increasingly focuses on TV shows post-2015
-
-Strong regional genre clusters (Indian dramas, US comedies, etc.)
-
-Identified aging content clusters suitable for renewal or retirement decisions
-
-💡 Key Findings
-
-The number of movies on Netflix has declined since 2010, while TV shows nearly tripled.
-
-The US, India, and UK dominate the catalog, with differing genre strengths.
-
-Clusters reveal clear thematic patterns:
-
-Cluster 0: Contemporary Netflix Originals & Dramas
-
-Cluster 1: International & Family Shows
-
-Cluster 2: Classic Hollywood Movies
-
-🧭 Business Applications
-
-Content Acquisition: Identify underrepresented genres or countries.
-
-Personalization: Use cluster membership as recommendation features.
-
-Catalog Management: Curate or retire underperforming clusters.
-
-Regional Strategy: Align local catalog composition with cluster insights.
-
-🎥 Presentation Resources
-
-📓 Notebook: netfilxml_final.ipynb
-
-🎤 Teleprompter Script: teleprompter_Anshika_Dixit.md
- — Ready for a 15–20 minute video explanation
-
-🔮 Future Work
-
-Integrate IMDB or Rotten Tomatoes ratings for quality validation
-
-Add user engagement metrics (views, retention) for semi-supervised fine-tuning
-
-Experiment with advanced embeddings (BERT or Sentence Transformers)
-
-Automate cluster labeling using keyword summarization
+Anshika Dixit |
