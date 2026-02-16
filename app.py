@@ -8,6 +8,9 @@ from nltk.corpus import stopwords
 import urllib.parse
 import streamlit.components.v1 as components
 
+# Fallback poster used when a title has no image/poster in the CSV
+FALLBACK_POSTER = "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg"
+
 # --- 1. Setup & Downloads ---
 @st.cache_resource
 def download_nltk_data():
@@ -44,6 +47,17 @@ def advanced_clean(text):
     cleaned_words = [lemmatizer.lemmatize(w) for w in words if w not in stop_words]
     return " ".join(cleaned_words)
 
+
+def excerpt(text: str, max_len: int = 160) -> str:
+    """Return a short, single-line excerpt from a longer description."""
+    if not text:
+        return ""
+    s = str(text).strip()
+    if len(s) <= max_len:
+        return s
+    cut = s[:max_len].rsplit(' ', 1)[0]
+    return cut + '...'
+
 # --- 4. Sidebar: Branding & Test Samples ---
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", width=150)
 st.sidebar.title("Navigation")
@@ -74,18 +88,29 @@ if st.sidebar.button("Show Random Titles from Dataset"):
     cluster_view = df[df['cluster_km'] == selected_cluster][[
         'title', 'type', 'listed_in', 'description', 'Netflix Link', 'IMDb Link', 'Image'
     ]].sample(10)
-    st.dataframe(cluster_view[['title', 'type', 'listed_in', 'description']])
-    # show inline action links (use CSV links, not a search query)
-    for _, r in cluster_view.iterrows():
-        nf_url = r.get('Netflix Link') or ''
-        imdb_url = r.get('IMDb Link') or ''
-        link_html = []
-        if nf_url:
-            link_html.append(f'<a href="{nf_url}" target="_blank" rel="noopener noreferrer">🔗 Open on Netflix — {r["title"]}</a>')
-        if imdb_url:
-            link_html.append(f'<a href="{imdb_url}" target="_blank" rel="noopener noreferrer">🎬 IMDb — {r["title"]}</a>')
-        if link_html:
-            st.markdown(" &nbsp;|&nbsp; ".join(link_html), unsafe_allow_html=True)
+    # render a compact list with poster + title + inline links (use CSV image if present)
+    for r in cluster_view.to_dict('records'):
+        cols = st.columns([1, 4])
+        with cols[0]:
+            img = r.get('Image') or r.get('Poster')
+            if not img or (isinstance(img, float) and pd.isna(img)) or not str(img).strip():
+                img = FALLBACK_POSTER
+            st.image(img, width=100)
+        with cols[1]:
+            st.markdown(f"**{r.get('title','Unknown')}**")
+            if r.get('listed_in'):
+                st.caption(r.get('listed_in'))
+            # short description excerpt
+            desc = r.get('description') or r.get('Summary') or ''
+            if desc:
+                st.markdown(f"<div style='color:#555;font-size:13px'>{excerpt(desc, 160)}</div>", unsafe_allow_html=True)
+            links = []
+            if r.get('Netflix Link'):
+                links.append(f'<a href="{r.get("Netflix Link")}" target="_blank" rel="noopener noreferrer">🔗 Netflix</a>')
+            if r.get('IMDb Link'):
+                links.append(f'<a href="{r.get("IMDb Link")}" target="_blank" rel="noopener noreferrer">🎬 IMDb</a>')
+            if links:
+                st.markdown(' &nbsp;|&nbsp; '.join(links), unsafe_allow_html=True)
     # Scroll to the cluster glimpse element
     components.html(
         """
@@ -171,9 +196,10 @@ if st.session_state.last_cluster is not None:
         if available.empty:
             return pd.DataFrame([])
         n_show = min(len(available), n)
-        # include Netflix/IMDb links and image so UI can render inline actions
+        # include description + Netflix/IMDb links and image so UI can render inline actions
         picks = available[[
-            'title', 'type', 'listed_in', 'release_year', 'Netflix Link', 'IMDb Link', 'Image', 'Poster'
+            'title', 'type', 'listed_in', 'description', 'release_year',
+            'Netflix Link', 'IMDb Link', 'Image', 'Poster'
         ]].sample(n_show)
         st.session_state.seen_titles.extend(picks['title'].tolist())
         st.session_state.last_recommendations = picks.to_dict('records')
@@ -224,10 +250,9 @@ if st.session_state.last_cluster is not None:
             cols = st.columns([1, 4])
             with cols[0]:
                 img = rec.get('Image') or rec.get('Poster')
-                if img and isinstance(img, str) and img.strip():
-                    st.image(img, width=120)
-                else:
-                    st.write('')
+                if not img or (isinstance(img, float) and pd.isna(img)) or not str(img).strip():
+                    img = FALLBACK_POSTER
+                st.image(img, width=120)
             with cols[1]:
                 title = rec.get('title', 'Unknown')
                 year = rec.get('release_year')
