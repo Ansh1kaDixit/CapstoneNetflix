@@ -59,6 +59,34 @@ K-Means (Final Model): Achieved the best separation with a Silhouette Score of 0
 Hierarchical Clustering: Used Dendrogram analysis to visualize the "genealogy" of sub-genres.
 
 DBSCAN: Used to identify "Outliers"—highly unique, non-formulaic titles that represent niche content categories.
+
+## 🎯 Mission & data‑preparation (Jupyter notebook)
+
+**Mission:** produce a clean, semantically‑rich dataset and lightweight ML artifacts that power a fast, explainable Streamlit demo. All heavy data‑work was performed in the Jupyter notebook so the app only needs to load precomputed artifacts for responsive UI and repeatable results.
+
+What we did in the notebook (`netfilx_ml.ipynb`):
+- Merge sources: raw Netflix export(s) + external metadata (IMDb / RottenTomatoes where available).
+- Clean & normalize: fix missing values, normalize dates/years, deduplicate and standardize text fields.
+- Text assembly & NLP prep: build a `text_blob` (title + genres + synopsis + cast), then apply regex cleaning, lowercasing, stop‑word removal and lemmatization.
+- Feature engineering: train a TF‑IDF vectorizer (1–2 grams, feature cap) and transform the corpus.
+- Model training & evaluation: train K‑Means (choose k via silhouette/inspection) and inspect cluster contents.
+- Export: serialize artifacts used by the app (`netflix_tfidf_vectorizer.pkl`, `netflix_kmeans_model.pkl`) and save the cleaned dataset (`netflix_final_clustered_data.csv`).
+
+Why we keep this in the notebook:
+- Reproducible EDA, easy parameter tuning and visual inspection during preprocessing.
+- Streamlit remains snappy because the app loads pickled artifacts rather than retraining or reprocessing on each run.
+
+Example notebook export (used by `app.py`):
+```py
+pickle.dump(best_kmeans, open('netflix_kmeans_model.pkl','wb'))
+pickle.dump(tfidf, open('netflix_tfidf_vectorizer.pkl','wb'))
+df.to_csv('netflix_final_clustered_data.csv', index=False)
+```
+
+How the Streamlit app consumes these artifacts:
+- loads the pickled TF‑IDF vectorizer + K‑Means model and the cleaned CSV at startup
+- precomputes a TF‑IDF matrix for fast cosine similarity lookups
+- cleans & vectorizes user input with the same TF‑IDF object, predicts cluster with the saved model, and returns cluster members filtered by cosine similarity (slider controls strictness)
 🚀 How to Run the App
 Install dependencies:
 
@@ -99,7 +127,7 @@ Contributing
 License
 - This repository is provided for educational/demo purposes. Add a LICENSE file if you plan to publish or distribute the code.
 📂 Repository Structure
-netflix_ml.ipynb: Full Jupyter Notebook containing EDA, hypothesis testing, and model development.
+`netfilx_ml.ipynb` (Jupyter notebook): Full EDA, preprocessing, model development and artifact export used by the Streamlit app.
 
 app.py: Streamlit application script for real-time cluster prediction.
 
