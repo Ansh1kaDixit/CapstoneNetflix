@@ -6,8 +6,7 @@ import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 
-# --- 1. Initial Setup & NLTK Downloads ---
-# These are required for the text cleaning to work on Streamlit Cloud
+# --- 1. Setup & Downloads ---
 @st.cache_resource
 def download_nltk_data():
     nltk.download('wordnet')
@@ -21,81 +20,60 @@ stop_words = set(stopwords.words('english'))
 # --- 2. Load Artifacts ---
 @st.cache_resource
 def load_data():
-    # Make sure these filenames match exactly what you saved in your notebook
     df = pd.read_csv('netflix_final_clustered_data.csv')
     model = pickle.load(open('netflix_kmeans_model.pkl', 'rb'))
     vectorizer = pickle.load(open('netflix_tfidf_vectorizer.pkl', 'rb'))
     return df, model, vectorizer
 
-try:
-    df, model, vectorizer = load_data()
-except FileNotFoundError:
-    st.error("Required files (.pkl or .csv) not found. Please ensure they are in the same directory as app.py")
+df, model, vectorizer = load_data()
 
-# --- 3. Text Pre-processing Function ---
+# --- 3. Cleaning Function ---
 def advanced_clean(text):
-    # Match the logic used in netflix_ml.ipynb
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     words = text.split()
-    # Lemmatize and remove stopwords
     cleaned_words = [lemmatizer.lemmatize(w) for w in words if w not in stop_words]
     return " ".join(cleaned_words)
 
-# --- 4. Streamlit UI ---
-st.set_page_config(page_title="Netflix Content Clustering", page_icon="🎬", layout="wide")
-
+# --- 4. Streamlit Layout ---
+st.set_page_config(page_title="Netflix Theme Predictor", page_icon="🍿")
 st.title("🎬 Netflix Content Strategy & Recommendation Engine")
-st.markdown("""
-This application uses an **Unsupervised Machine Learning (K-Means)** model to categorize Netflix titles based on their 'thematic DNA'.
-Paste a movie or TV show description below to find its strategic cluster and similar titles.
-""")
 
-col1, col2 = st.columns([1, 1])
+# Testing Samples in Sidebar
+st.sidebar.header("🧪 Test Sample Descriptions")
+st.sidebar.info("Copy and paste these into the box to see the model work accurately:")
 
-with col1:
-    st.subheader("Analyze New Content")
-    user_input = st.text_area(
-        "Enter Description/Keywords:", 
-        height=200, 
-        placeholder="e.g., A group of survivors must navigate a post-apocalyptic world filled with zombies..."
-    )
-    
-    predict_button = st.button("Predict Cluster & Recommend")
+samples = {
+    "Kids/Animation": "An animated musical adventure for young children featuring talking animals and catchy songs about friendship.",
+    "Documentary": "A deep-dive investigative documentary exploring real-life crime scenes and forensic evidence.",
+    "Horror/Thriller": "A dark psychological thriller where a group of teenagers discovers a haunted house in the middle of a forest.",
+    "International Drama": "A sweeping romantic period drama set in 19th-century Europe, exploring themes of forbidden love and betrayal."
+}
 
-with col2:
-    st.subheader("Results")
-    if predict_button:
-        if user_input.strip():
-            # Process and Predict
-            cleaned_text = advanced_clean(user_input)
-            
-            # Check if input is too short after cleaning
-            if not cleaned_text:
-                st.error("Input is too vague. Please provide more descriptive keywords.")
-            else:
-                vectorized_input = vectorizer.transform([cleaned_text])
-                cluster_id = model.predict(vectorized_input)[0]
-                
-                st.success(f"Predicted Strategic Cluster ID: **{cluster_id}**")
-                
-                # Show related titles from the same cluster
-                st.markdown(f"### 🍿 Similar Titles in Cluster {cluster_id}")
-                # We use .sample() so the list changes and feels fresh
-                recommendations = df[df['cluster_km'] == cluster_id][['title', 'type', 'listed_in', 'release_year']].sample(5)
-                st.table(recommendations)
+for label, text in samples.items():
+    st.sidebar.text_area(f"Sample for {label}:", text, height=100)
+
+# Main Prediction Area
+st.subheader("Analyze Content Description")
+user_input = st.text_area("Paste a detailed description here:", height=150, help="Short titles like 'Baby' don't provide enough data. Try 2-3 sentences.")
+
+if st.button("Predict Cluster & Recommend"):
+    if user_input.strip():
+        cleaned_text = advanced_clean(user_input)
+        vectorized_input = vectorizer.transform([cleaned_text])
+        
+        # Check if the model recognizes any words
+        if vectorized_input.nnz == 0:
+            st.error("⚠️ **The model doesn't recognize those keywords.**")
+            st.warning("Short phrases like 'baby theme songs' are too vague. Please add more descriptive details about the genre, plot, or characters.")
         else:
-            st.warning("Please enter a description to get a recommendation.")
-
-# --- 5. Sidebar Explorer ---
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", width=150)
-st.sidebar.markdown("---")
-st.sidebar.header("Cluster Explorer")
-selected_cluster = st.sidebar.slider("Select Cluster ID", 0, 5, 0)
-
-if st.sidebar.button("Explore Titles"):
-    st.subheader(f"Glimpse into Cluster {selected_cluster}")
-    cluster_view = df[df['cluster_km'] == selected_cluster][['title', 'type', 'listed_in', 'description']].sample(10)
-    st.dataframe(cluster_view)
-
-st.sidebar.markdown("---")
-st.sidebar.info("Developed by Anshika Dixit | Unsupervised ML Project")
+            cluster_id = model.predict(vectorized_input)[0]
+            st.success(f"Predicted Strategic Cluster ID: **{cluster_id}**")
+            
+            # Recommendation Logic
+            st.markdown(f"### 🍿 Similar Titles in Cluster {cluster_id}")
+            cluster_df = df[df['cluster_km'] == cluster_id]
+            n_samples = min(len(cluster_df), 5)
+            recommendations = cluster_df[['title', 'type', 'listed_in', 'release_year']].sample(n_samples)
+            st.table(recommendations)
+    else:
+        st.warning("Please enter some
