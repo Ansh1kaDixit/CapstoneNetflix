@@ -69,6 +69,10 @@ if 'last_cluster' not in st.session_state:
     st.session_state.last_cluster = None
 if 'seen_titles' not in st.session_state:
     st.session_state.seen_titles = []
+if 'recs_shown' not in st.session_state:
+    st.session_state.recs_shown = False
+if 'last_recommendations' not in st.session_state:
+    st.session_state.last_recommendations = []
 
 user_input = st.text_area(
     "Paste Content Description Here:", 
@@ -88,15 +92,17 @@ with col1:
                 st.error("⚠️ The model doesn't recognize those keywords.")
                 st.session_state.last_cluster = None
             else:
-                # NEW PREDICTION: Reset the seen titles list
+                # NEW PREDICTION: Reset the seen titles list and recommendation state
                 st.session_state.last_cluster = model.predict(vectorized_input)[0]
-                st.session_state.seen_titles = [] 
+                st.session_state.seen_titles = []
+                st.session_state.recs_shown = False
+                st.session_state.last_recommendations = []
         else:
             st.warning("Please enter a description.")
 
-with col2:
-    # "Suggest More" Button logic
-    suggest_more = st.button("🔄 Suggest More (Unseen Content)")
+# NOTE: the 'Suggest More' button is now a smart button rendered only when
+# recommendations are visible (see logic below). The old always-visible
+# button was removed.
 
 # Logic for displaying recommendations
 if st.session_state.last_cluster is not None:
@@ -113,15 +119,47 @@ if st.session_state.last_cluster is not None:
         st.session_state.seen_titles = []
         available_df = full_cluster_df
     
-    # 3. Pick 5 new titles
-    n_to_show = min(len(available_df), 5)
-    new_recommendations = available_df[['title', 'type', 'listed_in', 'release_year']].sample(n_to_show)
-    
-    # 4. Add these new titles to the "seen" list so they don't show up next time
-    st.session_state.seen_titles.extend(new_recommendations['title'].tolist())
-    
+    # SMART: show initial recommendations once, then let the "Suggest More"
+    # button fetch additional unseen batches or reset when exhausted.
+    def pick_and_store(n=5):
+        available = full_cluster_df[~full_cluster_df['title'].isin(st.session_state.seen_titles)]
+        if available.empty:
+            return pd.DataFrame([])
+        n_show = min(len(available), n)
+        picks = available[['title', 'type', 'listed_in', 'release_year']].sample(n_show)
+        st.session_state.seen_titles.extend(picks['title'].tolist())
+        st.session_state.last_recommendations = picks.to_dict('records')
+        st.session_state.recs_shown = True
+        return picks
+
+    # If we haven't yet shown the first batch after prediction, do so now.
+    if not st.session_state.recs_shown:
+        new_recommendations = pick_and_store(5)
+    else:
+        # Rehydrate the last recommendations for display
+        if st.session_state.last_recommendations:
+            new_recommendations = pd.DataFrame(st.session_state.last_recommendations)
+        else:
+            new_recommendations = pick_and_store(5)
+
     st.markdown(f"### 🍿 Recommendations (Unseen in this session)")
-    st.table(new_recommendations)
+    if new_recommendations.empty:
+        st.warning("No available recommendations for this cluster.")
+    else:
+        st.table(new_recommendations)
     st.caption(f"Currently tracking {len(st.session_state.seen_titles)} seen titles in this session.")
+
+    # Smart Suggest button (only shown when recommendations are visible)
+    remaining_df = full_cluster_df[~full_cluster_df['title'].isin(st.session_state.seen_titles)]
+    if not remaining_df.empty:
+        if st.button("🔄 Suggest More (Unseen Content)"):
+            pick_and_store(5)
+            st.experimental_rerun()
+    else:
+        # All titles have been seen in this session: offer reset-and-suggest
+        if st.button("🔁 Reset & Suggest Again"):
+            st.session_state.seen_titles = []
+            pick_and_store(5)
+            st.experimental_rerun()
 else:
     st.info("Waiting for input... Paste a description and click 'Predict' to see results.")
