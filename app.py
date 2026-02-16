@@ -6,6 +6,7 @@ import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 import urllib.parse
+import html
 import streamlit.components.v1 as components
 
 # Fallback poster used when a title has no image/poster in the CSV.
@@ -66,6 +67,25 @@ def excerpt(text: str, max_len: int = 160) -> str:
     cut = s[:max_len].rsplit(' ', 1)[0]
     return cut + '...'
 
+
+def render_image_with_fallback(img_url: str, width: int = 120, alt: str = 'poster') -> None:
+    """Render an <img> tag that falls back to FALLBACK_POSTER when the source fails to load.
+
+    Uses components.html so we can attach an onerror handler to swap the src client-side.
+    """
+    if not img_url or (isinstance(img_url, float) and pd.isna(img_url)):
+        img_url = FALLBACK_POSTER
+    safe_src = html.escape(str(img_url), quote=True)
+    safe_fallback = html.escape(str(FALLBACK_POSTER), quote=True)
+    alt_text = html.escape(str(alt), quote=True)
+    # keep poster aspect ratio ~2:3; compute height for the iframe
+    height = int(width * 1.5)
+    img_html = (
+        f"<img src=\"{safe_src}\" alt=\"{alt_text}\" "
+        f"width=\"{width}\" style=\"height:auto;max-height:{height}px;object-fit:cover;border-radius:6px;\" "
+        f"onerror=\"this.onerror=null;this.src='{safe_fallback}';\"/>")
+    components.html(img_html, height=height + 8)
+
 # --- 4. Sidebar: Branding & Test Samples ---
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", width=150)
 st.sidebar.title("Navigation")
@@ -101,9 +121,7 @@ if st.sidebar.button("Show Random Titles from Dataset"):
         cols = st.columns([1, 4])
         with cols[0]:
             img = r.get('Image') or r.get('Poster')
-            if not img or (isinstance(img, float) and pd.isna(img)) or not str(img).strip():
-                img = FALLBACK_POSTER
-            st.image(img, width=100)
+            render_image_with_fallback(img, width=100, alt=r.get('title', 'poster'))
         with cols[1]:
             st.markdown(f"**{r.get('title','Unknown')}**")
             if r.get('listed_in'):
@@ -258,9 +276,7 @@ if st.session_state.last_cluster is not None:
             cols = st.columns([1, 4])
             with cols[0]:
                 img = rec.get('Image') or rec.get('Poster')
-                if not img or (isinstance(img, float) and pd.isna(img)) or not str(img).strip():
-                    img = FALLBACK_POSTER
-                st.image(img, width=120)
+                render_image_with_fallback(img, width=120, alt=rec.get('title', 'poster'))
             with cols[1]:
                 title = rec.get('title', 'Unknown')
                 year = rec.get('release_year')
