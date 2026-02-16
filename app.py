@@ -62,12 +62,22 @@ if st.sidebar.button("Show Random Titles from Dataset"):
     # Anchor the cluster glimpse so we can scroll to it programmatically
     st.markdown("<div id='cluster_glimpse'></div>", unsafe_allow_html=True)
     st.subheader(f"Glimpse into Cluster {selected_cluster}")
-    cluster_view = df[df['cluster_km'] == selected_cluster][['title', 'type', 'listed_in', 'description']].sample(10)
-    st.dataframe(cluster_view)
-    # Provide a Netflix search link for each shown title
-    for _, r in cluster_view[['title']].iterrows():
-        nf_url = f"https://www.netflix.com/search?q={urllib.parse.quote_plus(r['title'])}"
-        st.markdown(f"<a href=\"{nf_url}\" target=\"_blank\" rel=\"noopener\">🔗 Open on Netflix — {r['title']}</a>", unsafe_allow_html=True)
+    # include inline Netflix/IMDb links and image column in the glimpse
+    cluster_view = df[df['cluster_km'] == selected_cluster][[
+        'title', 'type', 'listed_in', 'description', 'Netflix Link', 'IMDb Link', 'Image'
+    ]].sample(10)
+    st.dataframe(cluster_view[['title', 'type', 'listed_in', 'description']])
+    # show inline action links (use CSV links, not a search query)
+    for _, r in cluster_view.iterrows():
+        nf_url = r.get('Netflix Link') or ''
+        imdb_url = r.get('IMDb Link') or ''
+        link_html = []
+        if nf_url:
+            link_html.append(f'<a href="{nf_url}" target="_blank" rel="noopener noreferrer">🔗 Open on Netflix — {r["title"]}</a>')
+        if imdb_url:
+            link_html.append(f'<a href="{imdb_url}" target="_blank" rel="noopener noreferrer">🎬 IMDb — {r["title"]}</a>')
+        if link_html:
+            st.markdown(" &nbsp;|&nbsp; ".join(link_html), unsafe_allow_html=True)
     # Scroll to the cluster glimpse element
     components.html(
         """
@@ -150,7 +160,10 @@ if st.session_state.last_cluster is not None:
         if available.empty:
             return pd.DataFrame([])
         n_show = min(len(available), n)
-        picks = available[['title', 'type', 'listed_in', 'release_year']].sample(n_show)
+        # include Netflix/IMDb links and image so UI can render inline actions
+        picks = available[[
+            'title', 'type', 'listed_in', 'release_year', 'Netflix Link', 'IMDb Link', 'Image', 'Poster'
+        ]].sample(n_show)
         st.session_state.seen_titles.extend(picks['title'].tolist())
         st.session_state.last_recommendations = picks.to_dict('records')
         st.session_state.recs_shown = True
@@ -172,11 +185,31 @@ if st.session_state.last_cluster is not None:
     if new_recommendations.empty:
         st.warning("No available recommendations for this cluster.")
     else:
-        st.table(new_recommendations)
-        # Per-row Netflix 'view' links (open in new tab)
-        for _, r in new_recommendations[['title']].iterrows():
-            nf_url = f"https://www.netflix.com/search?q={urllib.parse.quote_plus(r['title'])}"
-            st.markdown(f"<a href=\"{nf_url}\" target=\"_blank\" rel=\"noopener\">🔗 Netflix View — {r['title']}</a>", unsafe_allow_html=True)
+        # render cards with image + inline Netflix/IMDb links
+        for rec in pd.DataFrame(new_recommendations).to_dict('records'):
+            cols = st.columns([1, 4])
+            with cols[0]:
+                img = rec.get('Image') or rec.get('Poster')
+                if img and isinstance(img, str) and img.strip():
+                    st.image(img, width=120)
+                else:
+                    st.write('')
+            with cols[1]:
+                title = rec.get('title', 'Unknown')
+                year = rec.get('release_year')
+                header = f"**{title}** {f'({int(year)})' if year and not pd.isna(year) else ''}"
+                st.markdown(header)
+                if rec.get('listed_in'):
+                    st.caption(rec.get('listed_in'))
+                link_bits = []
+                nf_link = rec.get('Netflix Link')
+                imdb_link = rec.get('IMDb Link')
+                if nf_link and isinstance(nf_link, str) and nf_link.strip():
+                    link_bits.append(f'<a href="{nf_link}" target="_blank" rel="noopener noreferrer">🔗 View on Netflix</a>')
+                if imdb_link and isinstance(imdb_link, str) and imdb_link.strip():
+                    link_bits.append(f'<a href="{imdb_link}" target="_blank" rel="noopener noreferrer">🎬 IMDb</a>')
+                if link_bits:
+                    st.markdown(' &nbsp;|&nbsp; '.join(link_bits), unsafe_allow_html=True)
         # Auto-scroll to recommendations on first display
         if st.session_state.recs_shown and not st.session_state.scrolled_to_recs:
             components.html(
