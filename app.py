@@ -76,4 +76,4 @@ if st.button("Predict Cluster & Recommend"):
             recommendations = cluster_df[['title', 'type', 'listed_in', 'release_year']].sample(n_samples)
             st.table(recommendations)
     else:
-        st.warning("Please enter some
+        st.warning("Please enter some text first.")
